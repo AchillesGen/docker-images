@@ -1,0 +1,135 @@
+name: physval-image
+
+# Build the Achilles physics-validation image and publish it to GHCR.
+#   * pull requests            -> build only (verifies the Dockerfile; forks cannot push)
+#   * pushes to main           -> build + push (tags: main, <sha>, latest)
+#   * manual (workflow_dispatch)-> build + push
+#
+# The build is heavy (ROOT base + compiling HepMC3/ProSelecta/NUISANCE2/NUISANCE3),
+# so it is scoped to changes under physval/ and this workflow file. Remove the
+# `paths:` filters to run it on every change.
+on:
+  push:
+    branches: [main]
+    paths:
+      - physval/**
+      - .github/workflows/physval-image.yml
+  pull_request:
+    paths:
+      - physval/**
+      - .github/workflows/physval-image.yml
+  workflow_dispatch:
+
+# One build per ref; cancel superseded runs (a full build is expensive).
+concurrency:
+  group: physval-image-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Publish under the organization that owns this repository. `github.repository_owner`
+  # is the org for an org-owned repo, so the image lands at the organization location:
+  #   ghcr.io/<org>/achilles-physval
+  # To target a different GHCR org/user, define an Actions variable GHCR_NAMESPACE
+  # (Settings > Secrets and variables > Actions > Variables).
+  # Note: the first push creates the package as private and links it to this repo;
+  # an org owner can then adjust its visibility/access under the org's Packages.
+  IMAGE: ghcr.io/${{ vars.GHCR_NAMESPACE || github.repository_owner }}/achilles-physval
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: write   # required to push to GHCR with GITHUB_TOKEN
+
+    steps:
+      # The GHCR base image (~3 GB) plus the multi-stage build tree can exceed the
+      # ~14 GB free on the runner's root disk, so reclaim space first.
+      - name: Free up disk space
+        run: |
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /usr/local/share/powershell \
+            /usr/local/share/chromium \
+            /usr/local/lib/node_modules \
+            "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}" || true
+          sudo apt-get clean
+          docker system prune -af || true
+          df -h /
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Only log in when we intend to push (pull_request builds do not push, and
+      # fork PRs have no package-write token anyway).
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata (tags + labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,format=short
+
+      # Build and load into the runner's Docker so we can smoke-test it before
+      # pushing. Single-platform (linux/amd64) so `load` works.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./physval
+          file: ./physval/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          # GitHub Actions cache. NOTE: this multi-stage build is large and can
+          # exceed the 10 GB per-repo GHA cache limit, causing evictions; if that
+          # hurts, switch to a registry cache, e.g.:
+          #   cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          #   cache-to:   type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # pyNUISANCE is the workhorse for the analysis, so fail the build (before any
+      # push) if the package cannot be imported in the image.
+      - name: Smoke test - import pyNUISANCE
+        run: |
+          TAG="$(printf '%s\n' '${{ steps.meta.outputs.tags }}' | head -n1)"
+          echo "Testing image: ${TAG}"
+          docker run --rm "${TAG}" python3 -c "import pyNUISANCE; print('pyNUISANCE import OK')"
+
+      - name: Push image
+        if: github.event_name != 'pull_request'
+        run: |
+          printf '%s\n' '${{ steps.meta.outputs.tags }}' | while IFS= read -r tag; do
+            [ -n "${tag}" ] || continue
+            echo "Pushing ${tag}"
+            docker push "${tag}"
+          done
+
+      - name: Summary
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "### Pushed \`${IMAGE}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' '${{ steps.meta.outputs.tags }}' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
