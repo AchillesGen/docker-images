@@ -163,13 +163,15 @@ ENV CC=gcc-nowerror \
 RUN eval "$ROOTENV" && ldconfig \
  && git clone https://github.com/NUISANCEMC/nuisance.git /src/nuisance \
  && git -C /src/nuisance checkout --detach "${NUISANCE2_SHA}" \
- # Three sample families the Achilles physval suite uses do not work against NUISANCE2
- # as shipped, and fail silently -- an empty prediction, not an error. The WireCell
- # MicroBooNE_NCpi0 and MicroBooNE_CC1Mu0pNp samples set their bin index only in
- # FillHistograms, which NUISANCE3's legacy record never calls, and the Durham
- # ElectronData samples cut on variables that record fills after isSignal. Upstream as
- # NUISANCEMC/nuisance#115, #116 and the CC1Mu0pNp one; drop these once they merge and
- # the pin moves past them.
+ # Four NUISANCE2 fixes the Achilles physval suite needs. Three fail silently -- an
+ # empty prediction, not an error: the WireCell MicroBooNE_NCpi0 and
+ # MicroBooNE_CC1Mu0pNp samples set their bin index only in FillHistograms, which
+ # NUISANCE3's legacy record never calls, and the Durham ElectronData samples cut on
+ # variables that record fills after isSignal. The fourth is loud: SampleList offers
+ # twelve MicroBooNE_CC1Mu1p_XSec_1D* names but the class constructor's name chain
+ # covers only ten, so ProtonMomentum or EQE makes CreateSample abort the process and
+ # take its whole shard down. Upstream as NUISANCEMC/nuisance#115, #116 and two more;
+ # drop these once they merge and the pin moves past them.
  && for patch in /src/nuisance2-patches/*.patch; do \
         echo "[physval] applying $(basename "$patch")"; \
         git -C /src/nuisance apply --verbose "$patch"; \
