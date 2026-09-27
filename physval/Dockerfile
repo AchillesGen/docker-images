@@ -29,7 +29,10 @@ ARG PROSELECTA_VERSION=v1-RC6
 ARG PROSELECTA_SHA=c3f5a7a6c1be41f730f679c835adf9a3a52c6adb
 
 ARG NUISANCE2_REF=main
-ARG NUISANCE2_SHA=f5f79db6c7b80b496e249f938982d43291f91de7
+# 86c64b44 is the first main commit with the MicroBooNE CC1Mu1p delta p_n unit fix
+# (NUISANCEMC/nuisance#114); before it that sample plots a quantity that is not
+# delta p_n, whatever generator is fed in.
+ARG NUISANCE2_SHA=86c64b44754ce3a7b9bf3bf88f6207fc6a0256f1
 
 ARG NUISANCE3_REF=main
 ARG NUISANCE3_SHA=32bcc1f84118b617dd8fa0ea0c09371af18a5a4a
@@ -148,6 +151,7 @@ ARG NUISANCE2_SHA
 ARG BUILD_JOBS
 
 COPY --from=hepmc3 /opt/stage/hepmc3/usr/local/ /usr/local/
+COPY nuisance2-patches/ /src/nuisance2-patches/
 
 # NuHepMC pulls in fmt/spdlog via NuHepMC cpputils; build through the GCC-15/fmt
 # wrappers (see cc-nowerror-setup.sh) so those translation units compile.
@@ -159,6 +163,16 @@ ENV CC=gcc-nowerror \
 RUN eval "$ROOTENV" && ldconfig \
  && git clone https://github.com/NUISANCEMC/nuisance.git /src/nuisance \
  && git -C /src/nuisance checkout --detach "${NUISANCE2_SHA}" \
+ # Two samples the Achilles physval suite uses do not work against NUISANCE2 as
+ # shipped, and fail silently -- an empty prediction, not an error. MicroBooNE_NCpi0
+ # sets its bin index only in FillHistograms, which NUISANCE3's legacy record never
+ # calls, and the Durham ElectronData samples cut on variables that record fills after
+ # isSignal. Upstream as NUISANCEMC/nuisance#115 and #116; drop these once they merge
+ # and the pin moves past them.
+ && for patch in /src/nuisance2-patches/*.patch; do \
+        echo "[physval] applying $(basename "$patch")"; \
+        git -C /src/nuisance apply --verbose "$patch"; \
+    done \
  # Enable the pyNuHepMC python binding in the NuHepMC cpputils that NUISANCE2 pulls
  # in. NUISANCE3 reuses this cpputils (found via $NUISANCE) instead of building its
  # own, and NUISANCE3's pyNUISANCE does `import pyNuHepMC` at load, so the binding
@@ -185,8 +199,9 @@ RUN eval "$ROOTENV" && ldconfig \
  && echo "[physval] nuisance2 pyNuHepMC: ${found:-NOT-FOUND}" \
  && if [ -n "$found" ]; then cp "$found" /opt/nuisance2/python/3.13/; fi \
  && sha="$(git -C /src/nuisance rev-parse HEAD)" \
- && printf '{"nuisance2":{"repo":"https://github.com/NUISANCEMC/nuisance.git","ref":"%s","sha":"%s"}}\n' \
-        "${NUISANCE2_REF}" "${sha}" > /opt/versions/nuisance2.json \
+ && patches="$(cd /src/nuisance2-patches && ls *.patch | paste -sd, -)" \
+ && printf '{"nuisance2":{"repo":"https://github.com/NUISANCEMC/nuisance.git","ref":"%s","sha":"%s","patches":"%s"}}\n' \
+        "${NUISANCE2_REF}" "${sha}" "${patches}" > /opt/versions/nuisance2.json \
  && cat /opt/versions/nuisance2.json
 
 ####################################################################################
