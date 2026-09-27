@@ -1,0 +1,14 @@
+diff --git a/src/Electron/ElectronScattering_DurhamData.cxx b/src/Electron/ElectronScattering_DurhamData.cxx
+index 3f48a056..fa15492b 100644
+--- a/src/Electron/ElectronScattering_DurhamData.cxx
++++ b/src/Electron/ElectronScattering_DurhamData.cxx
+@@ -345,6 +345,9 @@ bool ElectronScattering_DurhamData::isSignal(FitEvent* event) {
+     return false;
+   }
+ 
++  // Fill the cut variables here rather than relying on the call order.
++  FillEventVariables(event);
++
+   // std::cout << "fXVar = " << fXVar << " " << fXLowLim << " " << fXHighLim <<
+   // std::endl;
+   // std::cout << "fYVar = " << fYVar << " " << fYLowLim << " " << fYHighLim <<
