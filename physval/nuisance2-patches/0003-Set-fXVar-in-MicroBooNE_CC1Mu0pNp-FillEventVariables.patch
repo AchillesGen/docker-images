@@ -1,0 +1,14 @@
+diff --git a/src/MicroBooNE/MicroBooNE_CC1Mu0pNp_XSec_nu.cxx b/src/MicroBooNE/MicroBooNE_CC1Mu0pNp_XSec_nu.cxx
+index f7bbaf66..9468e606 100644
+--- a/src/MicroBooNE/MicroBooNE_CC1Mu0pNp_XSec_nu.cxx
++++ b/src/MicroBooNE/MicroBooNE_CC1Mu0pNp_XSec_nu.cxx
+@@ -224,6 +224,9 @@ void MicroBooNE_CC1Mu0pNp_XSec_nu<D, Ds...>::FillEventVariables(FitEvent *custom
+     fXVars[dist] = (localbin < 0) ? -999 : localbin + curr_bin;
+     curr_bin += nblockbins;
+   }
++
++  // Seed fXVar for callers that read GetXVar() instead of FillHistograms.
++  fXVar = fXVars[*fDists.begin()];
+ }
+ 
+ //********************************************************************
