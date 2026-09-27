@@ -163,12 +163,13 @@ ENV CC=gcc-nowerror \
 RUN eval "$ROOTENV" && ldconfig \
  && git clone https://github.com/NUISANCEMC/nuisance.git /src/nuisance \
  && git -C /src/nuisance checkout --detach "${NUISANCE2_SHA}" \
- # Two samples the Achilles physval suite uses do not work against NUISANCE2 as
- # shipped, and fail silently -- an empty prediction, not an error. MicroBooNE_NCpi0
- # sets its bin index only in FillHistograms, which NUISANCE3's legacy record never
- # calls, and the Durham ElectronData samples cut on variables that record fills after
- # isSignal. Upstream as NUISANCEMC/nuisance#115 and #116; drop these once they merge
- # and the pin moves past them.
+ # Three sample families the Achilles physval suite uses do not work against NUISANCE2
+ # as shipped, and fail silently -- an empty prediction, not an error. The WireCell
+ # MicroBooNE_NCpi0 and MicroBooNE_CC1Mu0pNp samples set their bin index only in
+ # FillHistograms, which NUISANCE3's legacy record never calls, and the Durham
+ # ElectronData samples cut on variables that record fills after isSignal. Upstream as
+ # NUISANCEMC/nuisance#115, #116 and the CC1Mu0pNp one; drop these once they merge and
+ # the pin moves past them.
  && for patch in /src/nuisance2-patches/*.patch; do \
         echo "[physval] applying $(basename "$patch")"; \
         git -C /src/nuisance apply --verbose "$patch"; \
