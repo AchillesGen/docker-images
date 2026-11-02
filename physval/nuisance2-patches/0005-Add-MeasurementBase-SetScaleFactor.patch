@@ -1,0 +1,12 @@
+diff --git a/src/FitBase/MeasurementBase.h b/src/FitBase/MeasurementBase.h
+index 6d103d2..16a196d 100644
+--- a/src/FitBase/MeasurementBase.h
++++ b/src/FitBase/MeasurementBase.h
+@@ -240,6 +240,7 @@ public:
+ 
+   std::string GetName(void) { return fName; };
+   double GetScaleFactor(void) { return fScaleFactor; };
++  void SetScaleFactor(double scale_factor) { fScaleFactor = scale_factor; };
+ 
+   double GetXVar(void) { return fXVar; };
+   double GetYVar(void) { return fYVar; };

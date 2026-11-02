@@ -29,10 +29,10 @@ ARG PROSELECTA_VERSION=v1-RC6
 ARG PROSELECTA_SHA=c3f5a7a6c1be41f730f679c835adf9a3a52c6adb
 
 ARG NUISANCE2_REF=main
-# 86c64b44 is the first main commit with the MicroBooNE CC1Mu1p delta p_n unit fix
-# (NUISANCEMC/nuisance#114); before it that sample plots a quantity that is not
-# delta p_n, whatever generator is fed in.
-ARG NUISANCE2_SHA=86c64b44754ce3a7b9bf3bf88f6207fc6a0256f1
+# Needs at least NUISANCEMC/nuisance#114 (CC1Mu1p delta p_n units), #115 (NCpi0 fXVar)
+# and #116 (Durham ElectronData cuts); without them those samples are wrong or empty,
+# whatever generator is fed in.
+ARG NUISANCE2_SHA=cc78ce01be5198e4aac7e183d462f97e8b5a7997
 
 ARG NUISANCE3_REF=main
 ARG NUISANCE3_SHA=32bcc1f84118b617dd8fa0ea0c09371af18a5a4a
@@ -163,15 +163,13 @@ ENV CC=gcc-nowerror \
 RUN eval "$ROOTENV" && ldconfig \
  && git clone https://github.com/NUISANCEMC/nuisance.git /src/nuisance \
  && git -C /src/nuisance checkout --detach "${NUISANCE2_SHA}" \
- # Four NUISANCE2 fixes the Achilles physval suite needs. Three fail silently -- an
- # empty prediction, not an error: the WireCell MicroBooNE_NCpi0 and
+ # NUISANCE2 changes the Achilles physval suite needs, not upstream yet. The WireCell
  # MicroBooNE_CC1Mu0pNp samples set their bin index only in FillHistograms, which
- # NUISANCE3's legacy record never calls, and the Durham ElectronData samples cut on
- # variables that record fills after isSignal. The fourth is loud: SampleList offers
- # twelve MicroBooNE_CC1Mu1p_XSec_1D* names but the class constructor's name chain
- # covers only ten, so ProtonMomentum or EQE makes CreateSample abort the process and
- # take its whole shard down. Upstream as NUISANCEMC/nuisance#115, #116 and two more;
- # drop these once they merge and the pin moves past them.
+ # NUISANCE3's legacy record never calls, so they fail silently with an empty
+ # prediction. SampleList offers twelve MicroBooNE_CC1Mu1p_XSec_1D* names but the class
+ # constructor's name chain covers only ten, so ProtonMomentum or EQE makes CreateSample
+ # abort the process and take its whole shard down. SetScaleFactor lets NUISANCE3's
+ # convert_event_rates supply the normalisation. Drop each once the pin moves past it.
  && for patch in /src/nuisance2-patches/*.patch; do \
         echo "[physval] applying $(basename "$patch")"; \
         git -C /src/nuisance apply --verbose "$patch"; \
@@ -219,6 +217,7 @@ ARG BUILD_JOBS
 COPY --from=hepmc3 /opt/stage/hepmc3/usr/local/ /usr/local/
 COPY --from=proselecta /opt/stage/proselecta/usr/local/ /usr/local/
 COPY --from=nuisance2 /opt/nuisance2/ /opt/nuisance2/
+COPY nuisance3-patches/ /src/nuisance3-patches/
 
 # The legacy interface requires $NUISANCE to point at a NUISANCE2 install.
 ENV NUISANCE=/opt/nuisance2
@@ -234,6 +233,13 @@ RUN eval "$ROOTENV" && ldconfig \
  && source /opt/nuisance2/setup.sh \
  && git clone https://github.com/NUISANCEMC/nuisance3.git /src/nuisance3 \
  && git -C /src/nuisance3 checkout --detach "${NUISANCE3_SHA}" \
+ # Exposes each legacy sample's ConvertEventRates to python, since the legacy record
+ # never calls it and the samples' smearing and bin scaling are otherwise out of reach.
+ # Needs SetScaleFactor from nuisance2-patches.
+ && for patch in /src/nuisance3-patches/*.patch; do \
+        echo "[physval] applying $(basename "$patch")"; \
+        git -C /src/nuisance3 apply --verbose "$patch"; \
+    done \
  && cmake -S /src/nuisance3 -B /build/nuisance3 \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/opt/nuisance3 \
@@ -245,8 +251,9 @@ RUN eval "$ROOTENV" && ldconfig \
  # cpputils (built with python above) and is picked up from /opt/nuisance2/python
  # via PYTHONPATH in the final image.
  && sha="$(git -C /src/nuisance3 rev-parse HEAD)" \
- && printf '{"nuisance3":{"repo":"https://github.com/NUISANCEMC/nuisance3.git","ref":"%s","sha":"%s","legacy_nuisance2_interface":true}}\n' \
-        "${NUISANCE3_REF}" "${sha}" > /opt/versions/nuisance3.json \
+ && patches="$(cd /src/nuisance3-patches && ls *.patch | paste -sd, -)" \
+ && printf '{"nuisance3":{"repo":"https://github.com/NUISANCEMC/nuisance3.git","ref":"%s","sha":"%s","legacy_nuisance2_interface":true,"patches":"%s"}}\n' \
+        "${NUISANCE3_REF}" "${sha}" "${patches}" > /opt/versions/nuisance3.json \
  && cat /opt/versions/nuisance3.json
 
 ####################################################################################
