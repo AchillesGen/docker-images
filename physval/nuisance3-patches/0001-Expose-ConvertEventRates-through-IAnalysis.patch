@@ -1,0 +1,90 @@
+diff --git a/src/nuis/python/pyRecord.cxx b/src/nuis/python/pyRecord.cxx
+index c8d8f94..3c06798 100644
+--- a/src/nuis/python/pyRecord.cxx
++++ b/src/nuis/python/pyRecord.cxx
+@@ -145,6 +145,7 @@ void pyRecordInit(py::module &m) {
+       .def("get_covariance_matrix", &IAnalysis::get_covariance_matrix)
+       .def("get_correlation_matrix", &IAnalysis::get_correlation_matrix)
+       .def("get_smearing_matrix", &IAnalysis::get_smearing_matrix)
++      .def("convert_event_rates", &IAnalysis::convert_event_rates)
+       .def("get_cross_section_scaling", &IAnalysis::get_cross_section_scaling)
+       .def("get_all_cross_section_scalings",
+            &IAnalysis::get_all_cross_section_scalings)
+diff --git a/src/nuis/record/IAnalysis.cxx b/src/nuis/record/IAnalysis.cxx
+index 09cfdbf..52b87e7 100644
+--- a/src/nuis/record/IAnalysis.cxx
++++ b/src/nuis/record/IAnalysis.cxx
+@@ -91,6 +91,13 @@ Eigen::MatrixXd IAnalysis::get_smearing_matrix() const {
+       << "Eigen::MatrixXd IAnalysis::get_smearing_matrix() const";
+ }
+ 
++Eigen::VectorXd IAnalysis::convert_event_rates(Eigen::VectorXd const &,
++                                               double) const {
++  throw IAnalysisUnimplementedInterfaceFunction()
++      << "Eigen::VectorXd IAnalysis::convert_event_rates(Eigen::VectorXd const "
++         "&, double) const";
++}
++
+ std::vector<Eigen::MatrixXd> IAnalysis::get_all_smearing_matrices() const {
+   throw IAnalysisUnimplementedInterfaceFunction()
+       << "std::vector<Eigen::MatrixXd> IAnalysis::get_all_smearing_matrices() "
+diff --git a/src/nuis/record/IAnalysis.h b/src/nuis/record/IAnalysis.h
+index d6072c8..e16b719 100644
+--- a/src/nuis/record/IAnalysis.h
++++ b/src/nuis/record/IAnalysis.h
+@@ -122,6 +122,12 @@ struct IAnalysis : public std::enable_shared_from_this<IAnalysis> {
+   virtual finalise::func get_finalise() const;
+   virtual std::vector<finalise::func> get_all_finalise() const;
+ 
++  // Runs the analysis' own conversion from binned, weighted event rates to its
++  // published quantity, with the normalisation supplied by the caller.
++  virtual Eigen::VectorXd
++  convert_event_rates(Eigen::VectorXd const &event_rates,
++                      double scale_factor) const;
++
+   likelihood::func likelihood;
+ 
+   virtual std::string prediction_generation_hint() const;
+diff --git a/src/nuis/record/plugins/NUISANCE2Record.cxx b/src/nuis/record/plugins/NUISANCE2Record.cxx
+index 796183d..f6d9e2b 100644
+--- a/src/nuis/record/plugins/NUISANCE2Record.cxx
++++ b/src/nuis/record/plugins/NUISANCE2Record.cxx
+@@ -148,6 +148,38 @@ struct NUISANCE2Analysis : public IAnalysis {
+     }
+     return covmat;
+   }
++
++  // Samples can keep state from the events they select, so call this after the
++  // events have been through get_selection and get_projections.
++  Eigen::VectorXd convert_event_rates(Eigen::VectorXd const &event_rates,
++                                      double scale_factor) const {
++    auto meas1d = std::dynamic_pointer_cast<Measurement1D>(measurement);
++    if (!meas1d) {
++      throw NUISANCE2InvalidMeasurementType()
++          << "convert_event_rates only supports 1D measurements";
++    }
++
++    meas1d->ResetAll();
++    meas1d->SetScaleFactor(scale_factor);
++
++    TH1D *mc = meas1d->GetMCHistogram();
++    if (event_rates.size() != mc->GetNbinsX()) {
++      throw NUISANCE2InvalidMeasurementType()
++          << "convert_event_rates passed " << event_rates.size()
++          << " bins, but the measurement has " << mc->GetNbinsX();
++    }
++    for (int i = 0; i < mc->GetNbinsX(); ++i) {
++      mc->SetBinContent(i + 1, event_rates(i));
++    }
++
++    meas1d->ConvertEventRates();
++
++    Eigen::VectorXd converted(mc->GetNbinsX());
++    for (int i = 0; i < mc->GetNbinsX(); ++i) {
++      converted(i) = mc->GetBinContent(i + 1);
++    }
++    return converted;
++  }
+ };
+ 
+ NUISANCE2Record::NUISANCE2Record(YAML::Node const &cfg) { node = cfg; }
