@@ -1,0 +1,28 @@
+diff --git a/src/MicroBooNE/MicroBooNE_CC1Mu1p_XSec_1D_nu.cxx b/src/MicroBooNE/MicroBooNE_CC1Mu1p_XSec_1D_nu.cxx
+index 11cf0c27..2909188d 100644
+--- a/src/MicroBooNE/MicroBooNE_CC1Mu1p_XSec_1D_nu.cxx
++++ b/src/MicroBooNE/MicroBooNE_CC1Mu1p_XSec_1D_nu.cxx
+@@ -60,6 +60,11 @@ MicroBooNE_CC1Mu1p_XSec_1D_nu::MicroBooNE_CC1Mu1p_XSec_1D_nu(
+     objSuffix = "MuonMomentum";
+     fSettings.SetXTitle("p_{#mu} (GeV/c)");
+     fSettings.SetYTitle("d#sigma/dp_{#mu} (cm^{2}/(GeV/c)/^{40}Ar)");
++  } else if (!name.compare("MicroBooNE_CC1Mu1p_XSec_1DProtonMomentum_nu")) {
++    fDist = kProtonMomentum;
++    objSuffix = "ProtonMomentum";
++    fSettings.SetXTitle("p_{p} (GeV/c)");
++    fSettings.SetYTitle("d#sigma/dp_{p} (cm^{2}/(GeV/c)/^{40}Ar)");
+   } else if (!name.compare("MicroBooNE_CC1Mu1p_XSec_1DDeltaPn_nu")) {
+     fDist = kDeltaPn;
+     objSuffix = "DeltaPn";
+@@ -80,6 +85,11 @@ MicroBooNE_CC1Mu1p_XSec_1D_nu::MicroBooNE_CC1Mu1p_XSec_1D_nu(
+     objSuffix = "ECal";
+     fSettings.SetXTitle("E^{Cal} (GeV)");
+     fSettings.SetYTitle("d#sigma/dE^{Cal} (cm^{2}/(GeV)/^{40}Ar)");
++  } else if (!name.compare("MicroBooNE_CC1Mu1p_XSec_1DEQE_nu")) {
++    fDist = kEQE;
++    objSuffix = "EQE";
++    fSettings.SetXTitle("E^{QE} (GeV)");
++    fSettings.SetYTitle("d#sigma/dE^{QE} (cm^{2}/(GeV)/^{40}Ar)");
+   } else {
+     NUIS_ABORT(
+         "MicroBooNE_CC1Mu1p_XSec_1D_nu: Didn’t get a valid name: " << name);
